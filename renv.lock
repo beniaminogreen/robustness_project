@@ -2260,7 +2260,7 @@
     "ivrobustness": {
       "Package": "ivrobustness",
       "Version": "0.0.0.9000",
-      "Source": "unknown",
+      "Source": "GitHub",
       "Title": "Robustness Values for Causal Estimation",
       "Authors@R": "person(\"Beniamino\", \"Green\", , \"beniamino.green@yale.edu\", role = c(\"aut\", \"cre\"))",
       "Description": "What the package does (one paragraph).",
@@ -2286,9 +2286,14 @@
         "stringr",
         "tibble"
       ],
-      "NeedsCompilation": "yes",
       "Author": "Beniamino Green [aut, cre]",
-      "Maintainer": "Beniamino Green <beniamino.green@yale.edu>"
+      "Maintainer": "Beniamino Green <beniamino.green@yale.edu>",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "beniaminogreen",
+      "RemoteRepo": "ivrobustness",
+      "RemoteRef": "main",
+      "RemoteSha": "43535e91ba78c6c102c97a2b6ec28f8c96504eea"
     },
     "jquerylib": {
       "Package": "jquerylib",
