@@ -1,18 +1,4 @@
-# _targets.R file
-library(targets)
-library(crew)
-library(tarchetypes)
-
-tar_source()
-
-tar_option_set(
-  packages = c("tidyverse", "ivrobustness", "fixest", "ggrepel"),
-  controller = crew_controller_local(workers = 1)
-)
-
-
-
-make_plot <- function(x, rvs, bench, grid_resolution = 400) {
+make_contour_plot <- function(x, rvs, bench, grid_resolution = 400) {
   if (!is.null(x$X)) {
       vars <- cbind(x$w, x$z, x$y)
       residuals <- stats::lm.fit(
@@ -128,24 +114,10 @@ make_plot <- function(x, rvs, bench, grid_resolution = 400) {
 }
 
 
-save_plot <- function(x, plt) {
+save_contour_plot <- function(x, plt) {
   out <- str_glue("figures/contours/{x$name}.png")
 
   ggsave(plot = plt, out, width = 7, height = 7)
 
   return(out)
 }
-
-
-list(
-  tar_target(files, list.files( "datasets", full.names = T)),
-  tar_target(datasets, load_ds(files), pattern = map(files)), 
-  tar_target(processed_datasets, subtract_fes(datasets), pattern = map(datasets)), 
-  tar_target(rvs, calc_rvs(processed_datasets), pattern = map(processed_datasets)), 
-  tar_target(benches, calc_benches(processed_datasets), pattern = map(processed_datasets)), 
-  tar_target(analysis_df, full_join(processed_datasets, rvs) %>% full_join(benches))
-  # tar_target(plots, make_plot(processed_datasets, rvs, benches), pattern = map(processed_datasets, rvs, benches)),
-  # tar_target(saved_plots, save_plot(processed_datasets, plots), pattern = map(processed_datasets, plots)),
-  # tar_quarto(report, "report.qmd")
-)
-
