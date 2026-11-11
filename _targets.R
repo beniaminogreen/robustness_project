@@ -6,146 +6,65 @@ library(tarchetypes)
 tar_source()
 
 tar_option_set(
-  packages = c("tidyverse", "ivrobustness", "fixest", "ggrepel"),
-  controller = crew_controller_local(workers = 1)
+  packages = c("tidyverse", "ivrobustness", "fixest", "ggrepel", "MASS"),
+  controller = crew_controller_local(workers = 12)
 )
 
 
+calc_rvs <- function(df) { 
+  stopifnot(nrow(df) == 1)
+  out_df <- robustness_values(df$w[[1]], df$z[[1]], df$y[[1]], df$X[[1]])
 
-make_plot <- function(x, rvs, bench, grid_resolution = 400) {
-  if (!is.null(x$X)) {
-      vars <- cbind(x$w, x$z, x$y)
-      residuals <- stats::lm.fit(
-          x = x$X,
-          y = vars,
-          singular.ok = TRUE
-        )$residuals
+  out_df$name <- df$name
 
-      x$w <- residuals[,1]
-      x$z <- residuals[,2]
-      x$y <- residuals[,3]
+  return(out_df)
+}
+
+calc_benches <- function(df) { 
+  stopifnot(nrow(df) == 1)
+
+  w <- as.double(haven::zap_labels(df$w[[1]]))
+  z <- as.double(haven::zap_labels(df$z[[1]]))
+  y <- as.double(haven::zap_labels(df$y[[1]]))
+  X <- df$X[[1]]
+
+  if (is.null(X) || length(X) == 0L) {
+    return(tibble())
   }
 
-  soo_rv = round(rvs$rv[1],3)
-  iv_rv = round(rvs$rv[2],3)
-
-  cmat <- ivrobustness:::CovarianceMatrix$new(
-    x$w, 
-    x$z, 
-    x$y
+  out_df <- benchmark_covariates(
+    w, z, y, X
   )
 
-  extended_cmat <- cmat$extend(c(0,0,0))
 
-  tau <-extended_cmat$tau() 
-  iv_est <-extended_cmat$iv_estimate() 
-  soo_est <-extended_cmat$soo_estimate() 
+  out_df$name <- df$name
 
-  get_new_tau <- function(x,y) { 
-    extended_cmat <- cmat$extend(c(0,x,y))
-    extended_cmat$tau()
-  }
-
-  df <- expand_grid(
-    r_1 = seq(-.99,.99, length.out = grid_resolution),
-    r_2 = seq(-.99,.99, length.out = grid_resolution)
-  ) %>% 
-    mutate(
-      true_te = map2(r_1, r_2, safely(get_new_tau)),
-      result = map_dbl(true_te, "result"),
-      soo_bias = soo_est - result,
-      iv_bias = iv_est - result,
-      error = map(tau, "error"),
-      true_te = NULL
-    )  
-
-  out_plot <- df %>%
-    mutate(iv_advantage = abs(soo_bias) - abs(iv_bias)) %>%
-    ggplot(aes(x = r_1, y = r_2)) +
-    geom_raster(aes(fill = iv_advantage)) +
-    geom_contour(
-      aes(z = iv_advantage,
-          colour = "Equal absolute bias",
-          linetype = "Equal absolute bias"),
-      breaks = 0, linewidth = 0.8, na.rm = TRUE
-    ) +
-    geom_contour(
-      aes(z = iv_bias,
-          colour = "Zero IV bias",
-          linetype = "Zero IV bias"),
-      breaks = 0, linewidth = 0.9, na.rm = TRUE
-    ) 
-
-    if (length(bench) != 0L)  {
-      out_plot  <- out_plot + 
-      geom_point(
-        data = bench,
-        aes(x = rho_2, y = rho_3),
-        shape = 21, size = 2.8, fill = "white", colour = "grey15"
-      ) +
-      geom_text_repel(
-        data = bench,
-        aes(x = rho_2, y = rho_3, label = variable),
-        size = 3.4, seed = 1, 
-        box.padding = 0.4, min.segment.length = 0,
-        colour = "grey15", segment.color = "grey50"
-      )
-    }
-
-
-    out_plot <- out_plot + scale_fill_gradient2(
-      name = "|SOO bias| - |IV bias|",
-      low = "#E8B89B", mid = "white", high = "#99C5DF",
-      midpoint = 0, na.value = "grey90"
-    ) +
-    scale_colour_manual(
-      name = NULL,
-      values = c("Equal absolute bias" = "grey15",
-                "Zero IV bias" = "#6A3D9A")
-    ) +
-    scale_linetype_manual(
-      name = NULL,
-      values = c("Equal absolute bias" = "solid",
-                "Zero IV bias" = "dashed")
-    ) +
-    coord_equal() +
-    labs(
-      title = str_glue("IV versus selection on observables {x$name}"),
-      subtitle = str_glue("SOO RV: {soo_rv}, IV RV: {iv_rv}"),
-      caption = "Blue: IV less biased · Orange: SOO less biased",
-      x = expression(rho[UZ * "|" * W]),
-      y = expression(rho[UY * "|" * W * "," * Z])
-    ) +
-    theme_minimal(base_size = 12) +
-    theme(
-      panel.grid = element_blank(),
-      plot.title = element_text(face = "bold"),
-      legend.position = "bottom",
-      legend.box = "vertical"
-    )
-
-  return(list(out_plot))
+  return(out_df)
 }
-
-
-save_plot <- function(x, plt) {
-  out <- str_glue("figures/contours/{x$name}.png")
-
-  ggsave(plot = plt, out, width = 7, height = 7)
-
-  return(out)
-}
-
 
 list(
   tar_target(files, list.files( "datasets", full.names = T)),
-  tar_target(datasets, load_ds(files), pattern = map(files)), 
-  tar_target(processed_datasets, subtract_fes(datasets), pattern = map(datasets)), 
-  tar_target(rvs, calc_rvs(processed_datasets), pattern = map(processed_datasets)), 
-  tar_target(benches, calc_benches(processed_datasets), pattern = map(processed_datasets)), 
-  tar_target(analysis_df, full_join(processed_datasets, rvs) %>% full_join(benches))
-  # tar_target(plots, make_plot(processed_datasets, rvs, benches), pattern = map(processed_datasets, rvs, benches)),
-  # tar_target(saved_plots, save_plot(processed_datasets, plots), pattern = map(processed_datasets, plots)),
-  # tar_quarto(report, "report.qmd")
+  tar_target(datasets, subtract_fes(load_ds(files)), pattern = map(files)), 
+
+  tar_target(sim_df, expand_grid(
+    r_yz = seq(.05,.95, length.out = 19),
+    r_zw = seq(.05,.95, length.out = 19),
+    p_yw_z = seq(.05,.95, length.out = 19),
+  )),
+
+  tar_target(sims, 
+    run_one_sim(sim_df), 
+    pattern = map(sim_df), 
+    error = "null"
+  ),
+
+  tar_target(rvs, calc_rvs(datasets), pattern = map(datasets)), 
+  tar_target(benches, calc_benches(datasets), pattern = map(datasets)), 
+  tar_target(analysis_df, full_join(datasets, rvs, by = "name") %>% full_join(benches, by = "name")),
+
+  tar_target(iv_contour_plots, make_iv_contour_plot(datasets), pattern = map(datasets), format = "file"),
+  tar_target(contour_plots, make_contour_plot(datasets, rvs, benches), pattern = map(datasets, rvs, benches)),
+  tar_target(saved_contour_plots, save_contour_plot(datasets, contour_plots), pattern = map(datasets, contour_plots)),
+  tar_quarto(report, "report.qmd")
 )
 

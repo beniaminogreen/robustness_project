@@ -1,4 +1,5 @@
 make_contour_plot <- function(x, rvs, bench, grid_resolution = 400) {
+  x <- lapply(x, function(col) col[[1L]])
   if (!is.null(x$X)) {
       vars <- cbind(x$w, x$z, x$y)
       residuals <- stats::lm.fit(
@@ -41,6 +42,7 @@ make_contour_plot <- function(x, rvs, bench, grid_resolution = 400) {
       result = map_dbl(true_te, "result"),
       soo_bias = soo_est - result,
       iv_bias = iv_est - result,
+      tau = result,
       error = map(tau, "error"),
       true_te = NULL
     )  
@@ -60,7 +62,7 @@ make_contour_plot <- function(x, rvs, bench, grid_resolution = 400) {
           colour = "Zero IV bias",
           linetype = "Zero IV bias"),
       breaks = 0, linewidth = 0.9, na.rm = TRUE
-    ) 
+    )  
 
     if (length(bench) != 0L)  {
       out_plot  <- out_plot + 
@@ -120,4 +122,66 @@ save_contour_plot <- function(x, plt) {
   ggsave(plot = plt, out, width = 7, height = 7)
 
   return(out)
+}
+
+
+make_iv_contour_plot <- function(x, n_points = 10^6) {
+  cmat <- ivrobustness:::CovarianceMatrix$new(
+    x$w[[1]], 
+    x$z[[1]], 
+    x$y[[1]]
+  )
+
+  name <- x$name[[1]]
+
+  iv_est <- cmat$iv_estimate()
+  n <- n_points
+  rhos <- tibble(
+    rho_1 = runif(n, -1,1),
+    rho_2 = runif(n, -sqrt(0.95), sqrt(0.95)),
+    rho_3 = runif(n,-1,1)
+  )  %>% 
+    mutate(
+      tau = pmap_dbl(list(rho_1, rho_2, rho_3), function(x,y,z) {
+        cmat$extend(c(x,y,z))$tau()
+      }), 
+      iv_y = pmap_dbl(list(rho_1, rho_2, rho_3), function(x,y,z) {
+        cmat$extend(c(x,y,z))$iv_y()
+      }), 
+      iv_z = pmap_dbl(list(rho_1, rho_2, rho_3), function(x,y,z) {
+        cmat$extend(c(x,y,z))$iv_z()
+      }), 
+    )
+  n_bins <- 50
+  edges <- seq(-1, 1, length.out = n_bins+1)
+  rhos  %>% 
+    mutate(
+      iv_y_bin = cut(iv_y, breaks = edges, include.lowest = TRUE, labels = FALSE),
+      iv_z_bin = cut(iv_z, breaks = edges, include.lowest = TRUE, labels = FALSE),
+      abs_bias = abs(iv_est - tau) / abs(iv_est),
+    ) %>% 
+    summarize(
+      abs_bias = max(abs_bias),
+      .by = c(iv_y_bin, iv_z_bin)
+    )  %>% 
+    mutate(
+      iv_y = edges[iv_y_bin],
+      iv_z = edges[iv_z_bin]
+    )  %>% 
+    ggplot(aes(x = iv_y, y = iv_z, fill = abs_bias)) + 
+    geom_raster()  + 
+    geom_contour(aes(z = abs_bias), breaks = 1, linetype = 2, col = "red") + 
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() + 
+    labs(
+      fill = "Absolute\nRelative Bias"
+    ) + 
+    xlab("RV_IV 1") + 
+    ylab("RV_IV 2") + 
+    ggtitle(str_glue("IV Contour Plot {name}"))
+
+  path <- str_glue("figures/iv_contour/{name}.png")
+  ggsave(path)
+
+  return(path)
 }
