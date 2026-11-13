@@ -1,0 +1,232 @@
+---
+title: "IV Robustness Value Project"
+author : "Beniamino Green"
+bibliography: bib.bib
+format:
+  typst:
+    toc: true
+    include-in-header:
+      - text: |
+          #show link: set text(fill: blue)
+---
+
+{{< pagebreak >}}
+
+# Introduction
+
+This report is a summary of the work I have done so far to characterize the distribution of IV robustness values across empirical papers in Political Science, and to understand the behavior of the robustness values via simulation. The `ivrobustness` package developed for this project can be found [here](https://github.com/beniaminogreen/ivrobustness). The repository for the analytics, including the source for this report can be found [here](https://github.com/beniaminogreen/robustness_project)
+
+
+```{r, include = F}
+library(tidyverse)
+library(ggrepel)
+library(scales)
+library(stringr)
+library(targets)
+
+
+n_papers <- length(targets::tar_read(files))
+paper_names <- unique(targets::tar_read(datasets)$name)
+```
+
+# Analysis of IV Papers
+
+## Corpus 
+
+I started with the corpus of studies collected by @Lal2024, which
+contains 67 instrumental variable studies. Using their replication
+materials, I extracted every standardized dataset from the replication materials, yielding `r n_papers` instrument, treatment, and outcome triples. This number is larger than the headline 67 number of studies because some studies had multiple IV analyses. Some studies had specifications with a single instrument. These were dropped from the analysis. 
+
+## Distribution of Robustness Values:
+
+I begin by examining the distributions of the IV and SOO robustness values.  A scatterplot of the SOO and IV robustness values can be seen in the figure below. Each datapoint represents a study. The position on the x-axis corresponds to the SOO robustness value for that study, while the position on the Y corresponds to it's IV robustness values.  For all experimental studies, I calculate the robustness values while imposing exogeneity, as we know that the instrument is exogenous in this context. 
+
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(scatterplots)[1]
+glue::glue("![]({img_files})\n\n\n")
+```
+
+Almost all of the points are compressed along the x-axis, suggesting that the Robustness values for IV studies is very low. The SOO values are almost uniformly higher than the IV values; there are only four studies in which the SOO Robustness value exceeds the IV Robustness value. These four studies are also some of the least robust; all robustness values for these studies are less than .1. The figure below displays the same information but scales up variation on the Y axis such that points can be more easily distinguished. 
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(scatterplots)[2]
+glue::glue("![]({img_files})\n\n\n")
+```
+
+
+## Associations with the Robustness Value:
+
+I then plot the distribution of IV Robustness Values against the effect size estimated by 2SLS. There appears to be some relationship; stronger effects are generally associated with higher robustness values. 
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(scatterplots)[3]
+glue::glue("![]({img_files})\n\n\n")
+
+```
+
+I investigate whether the first-stage F-statistic is associated with a more robust analysis, but find little relationship between it and the Robustness Value: 
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(scatterplots)[4]
+
+glue::glue("![]({img_files})\n\n\n")
+```
+
+This is likely because the F-statistic is a function of both the first-stage strength and the sample size, so a small first-stage will result in a large F-statistic as the sample size increases. Accordingly, I also plot the RV against the first-stage coefficient, finding a significant relationship: 
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(scatterplots)[5]
+
+glue::glue("![]({img_files})\n\n\n")
+```
+
+
+## Contour Plots 
+
+Next, I created contour plots as described in section 5.2 of @Huang2025, which
+plot contours of the relative bias of SOO vs IV for different levels of
+violations in the SOO identifying assumptions.  These plots also allow us to
+judge how extreme a confounder would have to be relative to the controls
+included in the regression specification. I plot the first 3 of these contour
+plots below, all 69 plots can be found in the appendix. 
+
+The controls included in the plots are almost always well within the "equal
+absolute bias" contour lines, suggesting that in order for IV to have less bias
+than SOO in most settings, we would have to believe that there is a confounder
+that violates the SOO assumptions significantly more severely than any of the
+control variables. 
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(saved_contour_plots)[1:3]
+
+cat("::: {layout-ncol=1}\n",
+    glue::glue("![]({img_files})\n\n\n"),
+    ":::",
+    sep = ""
+)
+```
+
+## IV contour Plots
+
+I have also created IV contour plots for the IV analyses which display the bias
+as a function of violations in the exclusion restriction and exogeneity. These
+are still a work-in-progress. The red contour lines in these diagrams
+corresponds to an absolute bias enough to overturn the point estimate. As with
+the previous contour plots, I include the plot for every study in the appendix.
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(iv_contour_plots)[1:3]
+
+cat("::: {layout-ncol=1}\n",
+    glue::glue("![]({img_files})\n\n\n"),
+    ":::",
+    sep = ""
+)
+```
+
+# Identifying Predictors of IV Robustness Value via Simulation
+
+I have also explored the characteristics of the IV Robustness value via simulation, trying to understand what factors predict high (or low) robustness values. The principal conclusion from this exercise is that the First-Stage R-squared value provides a bound on the IV robustness value, unless the treatment is very correlated with the outcome. Below, I plot the relationship between the First-Stage R-squared and the IV robustness value.  We can see that almost all points lie below the $y=x$ line which means that in almost all cases, the IV robustness value is less than the reduced-form R-squared value. 
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(sim_scatterplots)[1]
+glue::glue("![]({img_files})\n\n\n")
+```
+
+This lead me to hypothesize that the RV is bounded above by the $R^2$ from the reduced-form regression of $Y$ on $W$. I show this is the case in the next section, so long as the outcome and treatment are not too correlated.  Before this, I show the relationship between the IV Robustness Value and the reduced-from R-squared while imposing the exclusion restriction holds exactly:
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(sim_scatterplots)[2]
+glue::glue("![]({img_files})\n\n\n")
+```
+
+
+Almost all of the points lie on the $y=x$ line, which suggests that the reduced-form r-squared value gives the IV robustness value when the exclusion restriction is imposed. 
+
+Finally, I plot the distribution of IV robustness values versus the reduced form R-squared among the 69 analyses we analyze. The R-squared bounds the robustness value in every case, suggesting that the R-squared provides a valid bound for the types of studies examined in political science^[I assume RCTs can have exogeneity violations for the purposes of this analysis]. The median robustness value is 52% of the bound, which suggests that the bound is a reasonable heuristic, although there are some points that lie far below the y=x line. For these points the R-squared bound overstates the robustness of the study. 
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(bens_bound_plot)
+glue::glue("![]({img_files})\n\n\n")
+```
+
+{{< pagebreak >}}
+
+# Bounding the $RV_{IV}$ With the first-stage F Statistic
+
+```{=typst}
+#include "fs_proof.typ"
+```
+
+
+{{< pagebreak >}}
+
+# Appendix 
+
+# Table of Study Point Estimates
+
+```{r, echo = F}
+summary_table <- targets::tar_read(summary_table)
+
+summary_table <- summary_table %>% 
+  rename(
+    "Paper Name"  = "name", 
+    "F-Stat"  = "f_effective", 
+    "IV Coef."  = "iv_coefficient", 
+    "OLS Coef."  = "ols_coefficient", 
+    "RF Coef."  = "rf_coefficient", 
+    "FS Coef."  = "fs_coefficient", 
+  )
+
+knitr::kable(summary_table)
+```
+
+
+{{< pagebreak >}}
+
+## Contour Figures
+
+This section reports the contour plots for the 69 analyses we re-analyze. 
+@Huang2025. 
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(saved_contour_plots)
+
+cat("::: {layout-ncol=1}\n",
+    glue::glue("![]({img_files})\n\n\n"),
+    ":::",
+    sep = ""
+)
+```
+
+
+{{< pagebreak >}}
+
+## IV Contour Plots
+
+This section reports IV contour plots for the 69 analyses we re-analyze. 
+
+
+```{r, echo = F}
+#| output: asis
+img_files <- targets::tar_read(iv_contour_plots)
+
+cat("::: {layout-ncol=1}\n",
+    glue::glue("![]({img_files})\n\n\n"),
+    ":::",
+    sep = ""
+)
+```
+

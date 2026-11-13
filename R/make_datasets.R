@@ -26,6 +26,11 @@ run_one_sim <- function(config) {
   stopifnot(nrow(config) == 1)
   df <- make_dataset(config$r_yz[1], config$r_zw[1], config$p_yw_z[1])
   rvs <- robustness_values(df$W, df$Z, df$Y)
-  return(bind_cols(config, rvs))
+
+  cov_mat <- cov(df)
+
+  out_df <- bind_cols(config, rvs)
+  out_df$cov_mat <- list(cov_mat)
+  return(out_df)
 }
 

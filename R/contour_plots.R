@@ -22,6 +22,8 @@ make_contour_plot <- function(x, rvs, bench, grid_resolution = 400) {
     x$y
   )
 
+  corrplot <- make_corr_plot(x$w, x$z, x$y)
+
   extended_cmat <- cmat$extend(c(0,0,0))
 
   tau <-extended_cmat$tau() 
@@ -98,7 +100,7 @@ make_contour_plot <- function(x, rvs, bench, grid_resolution = 400) {
     ) +
     coord_equal() +
     labs(
-      title = str_glue("IV versus selection on observables {x$name}"),
+      title = str_glue("Sensitivity Plot For {x$name}"),
       subtitle = str_glue("SOO RV: {soo_rv}, IV RV: {iv_rv}"),
       caption = "Blue: IV less biased · Orange: SOO less biased",
       x = expression(rho[UZ * "|" * W]),
@@ -112,14 +114,16 @@ make_contour_plot <- function(x, rvs, bench, grid_resolution = 400) {
       legend.box = "vertical"
     )
 
-  return(list(out_plot))
+  x <- out_plot | corrplot
+
+  return(list(x))
 }
 
 
 save_contour_plot <- function(x, plt) {
-  out <- str_glue("figures/contours/{x$name}.png")
+  out <- str_glue("figures/contours/{x$name}.svg")
 
-  ggsave(plot = plt, out, width = 7, height = 7)
+  ggsave(plot = plt, out, width = 14)
 
   return(out)
 }
@@ -154,7 +158,10 @@ make_iv_contour_plot <- function(x, n_points = 10^6) {
     )
   n_bins <- 50
   edges <- seq(-1, 1, length.out = n_bins+1)
-  rhos  %>% 
+
+  corrplot <- make_corr_plot(x$w[[1]], x$z[[1]], x$y[[1]])
+
+  contor_plot <- rhos  %>% 
     mutate(
       iv_y_bin = cut(iv_y, breaks = edges, include.lowest = TRUE, labels = FALSE),
       iv_z_bin = cut(iv_z, breaks = edges, include.lowest = TRUE, labels = FALSE),
@@ -176,11 +183,13 @@ make_iv_contour_plot <- function(x, n_points = 10^6) {
     labs(
       fill = "Absolute\nRelative Bias"
     ) + 
-    xlab("RV_IV 1") + 
-    ylab("RV_IV 2") + 
+    xlab(" Partial Correlation of Y and W | ZU") + 
+    ylab("Correlation of W and U") + 
     ggtitle(str_glue("IV Contour Plot {name}"))
 
-  path <- str_glue("figures/iv_contour/{name}.png")
+  contor_plot + corrplot
+
+  path <- str_glue("figures/iv_contour/{name}.png", width = 14)
   ggsave(path)
 
   return(path)
